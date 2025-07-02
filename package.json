@@ -1,0 +1,36 @@
+{
+  "name": "projectbackend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ispaluan84/ProjectBackend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Ispaluan84/ProjectBackend/issues"
+  },
+  "homepage": "https://github.com/Ispaluan84/ProjectBackend#readme",
+  "dependencies": {
+    "dotenv": "17.0.1",
+    "express": "5.1.0",
+    "method-override": "3.0.0",
+    "mongodb": "^6.17.0",
+    "mongoose": "8.16.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
