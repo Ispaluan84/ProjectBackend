@@ -1,116 +1,118 @@
 const Product = require('../models/Product');
+const renderPage = require('../helpers/template');
+
+const getProductCards = (products) => products.map(p => `
+  <div class="product-card">
+    <img src="${p.image}" alt="${p.name}" width="150">
+    <h2>${p.name}</h2>
+    <p>${p.description}</p>
+    <p><strong>${p.price}€</strong></p>
+    <a href="/products/${p._id}">Ver detalle</a>
+  </div>
+  `).join('');
 
 const showProducts = async (req, res) => {
     try {
         const products = await Product.find();
-        let html = '<h1>Todos los productos</h1><ul>';
-        products.forEach(p => {
-            html += `<li>${p.name} - <a href="/products/${p._id}">Ver detalle</a></li>`;
-        });
-        html += '</ul><a href="/products/new">Crear producto</a>';
-            res.send(html);
+        const body = `
+        <h1>Todos los productos</h1>
+        <div class="products-grid">
+          ${getProductCards(products)}
+        </div>
+        `;
+        res.send(renderPage('Productos', body, 'home'));
     } catch (err) {
-        res.status(500).send('Error al obtener productos')
+        const errorBody = `<p>Error al cargar el producto.</p>`;
+        res.status(500).send(renderPage('Error', errorBody, ''));
     }
 };
 
 const showNewProduct = (req, res) => {
-  const html = `
-    <h1>Nuevo Producto</h1>
-    <form action="/products" method="POST">
-      <label>Nombre: <input name="name" required></label><br>
-      <label>Descripción: <textarea name="description" required></textarea></label><br>
-      <label>Imagen (URL): <input name="image" required></label><br>
-      <label>Categoría:
-        <select name="category" required>
-          <option value="Camisetas">Camisetas</option>
-          <option value="Pantalones">Pantalones</option>
-          <option value="Zapatos">Zapatos</option>
-          <option value="Accesorios">Accesorios</option>
-        </select>
-      </label><br>
-      <label>Talla:
-        <select name="size" required>
-          <option value="XS">XS</option><option value="S">S</option>
-          <option value="M">M</option><option value="L">L</option>
-          <option value="XL">XL</option>
-        </select>
-      </label><br>
-      <label>Precio: <input type="number" name="price" step="0.01" required></label><br>
+  const formHtml = `
+  <h1>Nuevo Producto</h1>
+    <form action="/products" method="POST" enctype="multipart/form-data" class="product-form">
+      <div class="form-group"><label for="name">Nombre:</label><input id="name" name="name" required /></div>
+      <div class="form-group"><label for="description">Descripción:</label><textarea id="description" name="description" required></textarea></div>
+      <div class="form-group"><label for="image">Imagen:</label><input type="file" id="image" name="image" accept="image/*" required /></div>
+      <div class="form-group"><label for="category">Categoría:</label><select id="category" name="category" required><option>Camisetas</option><option>Pantalones</option><option>Zapatos</option><option>Accesorios</option></select></div>
+      <div class="form-group"><label for="size">Talla:</label><select id="size" name="size" required><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option></select></div>
+      <div class="form-group"><label for="price">Precio:</label><input type="number" id="price" name="price" step="0.01" required /></div>
       <button type="submit">Crear</button>
-    </form>
-    <a href="/products">Volver</a>
-  `;
-  res.send(html);
+    </form>`
+  res.send(renderPage('Nuevo roducto', formHtml, ''));
 };
 
 const createProduct = async (req, res) => {
   try {
     const { name, description, image, category, size, price } = req.body;
-    const product = await Product.create({ name, description, image, category, size, price });
+    const uploadResult = await req.cloudinary.uploader.upload_stream({ name, description, image, category, size, price }, (error, result) => {
+      if(error) throw error;
+      return result;
+    }).end (req.file.buffer);
+    const product = await Product.create({ name, description, image: uploadResult.secure_url, category, size, price });
     res.redirect(`/products/${product._id}`);
-  } catch (err) {
-    res.status(500).send('Error al crear producto');
+  } catch {
+    res.status(500).send(renderPage('Error', `<p>Error al crear producto</p>`));
   }
 };
 
 const showProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.productId);
-    if (!product) return res.status(404).send('Producto no encontrado');
-    let html = `
-      <h1>${product.name}</h1>
-      <img src="${product.image}" alt="${product.name}" width="200"><br>
-      <p>${product.description}</p>
-      <p>Precio: ${product.price}€</p>
-      <p>Categoría: ${product.category} | Talla: ${product.size}</p>
-      <a href="/products/${product._id}/edit">Editar</a> |
-      <form action="/products/${product._id}?_method=DELETE" method="POST" style="display:inline">
+    const p = await Product.findById(req.params.productId);
+    if (!p) {
+      return res.status(404).send(renderPage('No encontrado', `<p>Producto no existe.</p>`, ''));
+    }
+    const content = `
+      <h1>${p.name}</h1>
+      <figure class="product-detail">
+      <img src="${p.image}" alt="${p.name}" width="200">
+      <p>${p.description}</p>
+      <p><strong>Precio:</strong> ${p.price}€</p>
+      <p><strong>Categoría:</strong> ${p.category} | <strong>Talla:</strong> ${p.size}</p>
+      <a href="/products/${p._id}/edit">Editar</a> |
+      <form action="/products/${p._id}?_method=DELETE" method="POST" style="display:inline">
         <button type="submit">Eliminar</button>
       </form>
-      <br><a href="/products">Volver</a>
     `;
-    res.send(html);
+    res.send(renderPage(p.name, content, ''));
   } catch (err) {
-    res.status(500).send('Error al obtener detalle del producto');
+    const errorBody = `<p>Error al cargar detalle</p>`
+    res.status(500).send(renderPage('Error', errorBody));
   }
 };
 
 const showEditProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.productId);
-    if (!product) return res.status(404).send('Producto no encontrado');
-    const html = `
-      <h1>Editar ${product.name}</h1>
-      <form action="/products/${product._id}?_method=PUT" method="POST">
-        <label>Nombre: <input name="name" value="${product.name}" required></label><br>
-        <label>Descripción: <textarea name="description" required>${product.description}</textarea></label><br>
-        <label>Imagen (URL): <input name="image" value="${product.image}" required></label><br>
-        <label>Categoría:
-          <select name="category" required>
-            <option value="Camisetas"${product.category==='Camisetas'? ' selected':''}>Camisetas</option>
-            <option value="Pantalones"${product.category==='Pantalones'? ' selected':''}>Pantalones</option>
-            <option value="Zapatos"${product.category==='Zapatos'? ' selected':''}>Zapatos</option>
-            <option value="Accesorios"${product.category==='Accesorios'? ' selected':''}>Accesorios</option>
-          </select>
-        </label><br>
-        <label>Talla:
-          <select name="size" required>
-            <option value="XS"${product.size==='XS'? ' selected':''}>XS</option>
-            <option value="S"${product.size==='S'? ' selected':''}>S</option>
-            <option value="M"${product.size==='M'? ' selected':''}>M</option>
-            <option value="L"${product.size==='L'? ' selected':''}>L</option>
-            <option value="XL"${product.size==='XL'? ' selected':''}>XL</option>
-          </select>
-        </label><br>
-        <label>Precio: <input type="number" name="price" value="${product.price}" step="0.01" required></label><br>
-        <button type="submit">Actualizar</button>
-      </form>
-      <a href="/products">Volver</a>
-    `;
-    res.send(html);
+    const p = await Product.findById(req.params.productId);
+    if (!p) {
+      return res.status(404).send(renderPage('No encontrado', `<p>Producto no existe.</p>`, ''));
+    }
+    const formHtml = `
+    <h1>Editar ${p.name}</h1>
+      <form action="/products/${p._id}?_method=PUT" method="POST" enctype="multipart/form-data" class="product-form">` +
+      `<div class="form-group"><label for="name">Nombre:</label><input id="name" name="name" value="${p.name}" required /></div>` +
+      `<div class="form-group"><label for="description">Descripción:</label><textarea id="description" name="description" required>${p.description}</textarea></div>` +
+      `<div class="form-group"><label for="image">Imagen:</label><input type="file" id="image" name="image" accept="image/*" /></div>` +
+      `<div class="form-group"><label for="category">Categoría:</label><select id="category" name="category" required>` +
+        `<option${p.category==='Camisetas'?' selected':''}>Camisetas</option>` +
+        `<option${p.category==='Pantalones'?' selected':''}>Pantalones</option>` +
+        `<option${p.category==='Zapatos'?' selected':''}>Zapatos</option>` +
+        `<option${p.category==='Accesorios'?' selected':''}>Accesorios</option>` +
+      `</select></div>` +
+      `<div class="form-group"><label for="size">Talla:</label><select id="size" name="size" required>` +
+        `<option${p.size==='XS'?' selected':''}>XS</option>` +
+        `<option${p.size==='S'?' selected':''}>S</option>` +
+        `<option${p.size==='M'?' selected':''}>M</option>` +
+        `<option${p.size==='L'?' selected':''}>L</option>` +
+        `<option${p.size==='XL'?' selected':''}>XL</option>` +
+      `</select></div>` +
+      `<div class="form-group"><label for="price">Precio:</label><input type="number" id="price" name="price" value="${p.price}" step="0.01" required /></div>` +
+      `<button type="submit">Actualizar</button></form>`
+    ;
+    res.send(renderPage(`Editar - ${p.name}`, formHtml, ''));
   } catch (err) {
-    res.status(500).send('Error al cargar formulario de edición');
+    const errorBody = `<p>Error al cargar edición.</p>`
+    res.status(500).send(renderPage('Error', errorBody, ''));
   }
 };
 
@@ -121,7 +123,8 @@ const updateProduct = async (req, res) => {
     await Product.findByIdAndUpdate(req.params.productId, { name, description, image, category, size, price });
     res.redirect(`/products/${req.params.productId}`);
   } catch (err) {
-    res.status(500).send('Error al actualizar producto');
+    const errorBody = `<p>Error al actualizar producto.</p>`;
+    res.status(500).send(renderPage('Error', errorBody, ''));
   }
 };
 
@@ -130,7 +133,7 @@ const deleteProduct = async (req, res) => {
     await Product.findByIdAndDelete(req.params.productId);
     res.redirect('/products');
   } catch (err) {
-    res.status(500).send('Error al eliminar producto');
+    res.status(500).send(renderPage('Error', errorBody, ''));
   }
 };
 
